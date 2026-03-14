@@ -6,6 +6,8 @@ import io
 import time
 
 import matplotlib.pyplot as plt
+from matplotlib.lines import Line2D
+from matplotlib.patches import Polygon, Rectangle
 import pandas as pd
 import streamlit as st
 
@@ -71,33 +73,154 @@ def _destination_options(floors: int, start_floor: int, direction: str) -> list[
 
 def _render_building_figure(state: dict[str, object], floors: int) -> plt.Figure:
     fig, ax = plt.subplots(figsize=(4.6, 6.4))
+    fig.patch.set_facecolor("#F4EBD0")
+    ax.set_facecolor("#F8F2E4")
 
     elevators = state["elevators"]
     x_values = [e["elevator_id"] for e in elevators]
-    y_values = [e["floor"] for e in elevators]
-
-    ax.scatter(x_values, y_values, c="#2E86AB", s=190, label="Elevators")
     observer_floor = int(state["observer_floor"])
-    ax.scatter([-1], [observer_floor], c="#D7263D", s=240, marker="*", label="Observer")
+    depth_x = 0.16
+    depth_y = 0.28
+    shaft_width = 0.56
+    car_height = 0.82
+    car_width = 0.4
+
+    for shaft_id in x_values:
+        left = shaft_id - shaft_width / 2
+        back_panel = Polygon(
+            [
+                (left, -0.45),
+                (left + shaft_width, -0.45),
+                (left + shaft_width + depth_x, -0.45 + depth_y),
+                (left + depth_x, -0.45 + depth_y),
+            ],
+            closed=True,
+            facecolor="#E3D7BD",
+            edgecolor="#A98F68",
+            linewidth=1.0,
+            zorder=0,
+        )
+        side_panel = Polygon(
+            [
+                (left + shaft_width, -0.45),
+                (left + shaft_width, floors - 0.45),
+                (left + shaft_width + depth_x, floors - 0.45 + depth_y),
+                (left + shaft_width + depth_x, -0.45 + depth_y),
+            ],
+            closed=True,
+            facecolor="#D0C0A3",
+            edgecolor="#A98F68",
+            linewidth=1.0,
+            zorder=0,
+        )
+        front_panel = Rectangle(
+            (left, -0.45),
+            shaft_width,
+            floors,
+            facecolor="#F7F2E8",
+            edgecolor="#A98F68",
+            linewidth=1.2,
+            zorder=1,
+        )
+        ax.add_patch(back_panel)
+        ax.add_patch(side_panel)
+        ax.add_patch(front_panel)
+
+        for floor in range(floors):
+            ax.plot(
+                [left, left + shaft_width],
+                [floor + 0.5, floor + 0.5],
+                color="#D7CAB0",
+                linewidth=0.5,
+                zorder=2,
+            )
 
     for e in elevators:
+        base_x = e["elevator_id"] - car_width / 2
+        base_y = e["floor"] - car_height / 2
+        front_face = Rectangle(
+            (base_x, base_y),
+            car_width,
+            car_height,
+            facecolor="#2E86AB",
+            edgecolor="#124559",
+            linewidth=1.1,
+            zorder=4,
+        )
+        side_face = Polygon(
+            [
+                (base_x + car_width, base_y),
+                (base_x + car_width, base_y + car_height),
+                (base_x + car_width + depth_x * 0.55, base_y + car_height + depth_y * 0.55),
+                (base_x + car_width + depth_x * 0.55, base_y + depth_y * 0.55),
+            ],
+            closed=True,
+            facecolor="#1F6F8B",
+            edgecolor="#124559",
+            linewidth=1.0,
+            zorder=3,
+        )
+        top_face = Polygon(
+            [
+                (base_x, base_y + car_height),
+                (base_x + car_width, base_y + car_height),
+                (base_x + car_width + depth_x * 0.55, base_y + car_height + depth_y * 0.55),
+                (base_x + depth_x * 0.55, base_y + car_height + depth_y * 0.55),
+            ],
+            closed=True,
+            facecolor="#63B3D1",
+            edgecolor="#124559",
+            linewidth=1.0,
+            zorder=5,
+        )
+        ax.add_patch(side_face)
+        ax.add_patch(front_face)
+        ax.add_patch(top_face)
         ax.text(
-            e["elevator_id"],
-            e["floor"] + 0.25,
+            e["elevator_id"] + 0.02,
+            e["floor"] + 0.72,
             e["direction"],
             ha="center",
             va="bottom",
             fontsize=8,
+            color="#3B2F2F",
+            zorder=6,
         )
 
-    ax.set_xlim(-1.6, max(x_values) + 1)
+    ax.scatter([-1.05], [observer_floor], c="#D7263D", s=240, marker="*", zorder=6)
+    ax.plot(
+        [-0.7, x_values[-1] + 0.45],
+        [observer_floor, observer_floor],
+        color="#D7263D",
+        linewidth=1.0,
+        alpha=0.35,
+        linestyle="--",
+        zorder=2,
+    )
+
+    ax.set_xlim(-1.35, max(x_values) + 0.9)
     ax.set_ylim(-0.5, floors - 0.5)
     ax.set_yticks(list(range(0, floors, max(1, floors // 10))))
     ax.set_xlabel("Shaft")
     ax.set_ylabel("Floor")
-    ax.set_title("Live Elevator State")
-    ax.grid(alpha=0.2)
-    ax.legend(loc="upper right", fontsize=8)
+    ax.set_title("Live Elevator State", color="#3B2F2F", pad=12)
+    ax.grid(axis="y", alpha=0.12, color="#7A6A53")
+    ax.spines["top"].set_visible(False)
+    ax.spines["right"].set_visible(False)
+    ax.spines["left"].set_color("#A98F68")
+    ax.spines["bottom"].set_color("#A98F68")
+    ax.tick_params(colors="#5C4B3A")
+    ax.xaxis.label.set_color("#5C4B3A")
+    ax.yaxis.label.set_color("#5C4B3A")
+    ax.legend(
+        handles=[
+            Rectangle((0, 0), 1, 1, facecolor="#2E86AB", edgecolor="#124559", label="Elevators"),
+            Line2D([0], [0], marker="*", color="w", label="Observer", markerfacecolor="#D7263D", markersize=12),
+        ],
+        loc="upper right",
+        fontsize=8,
+        frameon=False,
+    )
     fig.tight_layout()
     return fig
 
