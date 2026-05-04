@@ -220,10 +220,24 @@ class ElevatorSimulation:
 
     def _generate_demand_if_needed(self) -> None:
         req_rate = profile_request_probability(self.profile)
-        probability = req_rate * self.config.tick_seconds
-        if self.rng.random() >= min(1.0, probability):
-            return
+        expected = req_rate * self.config.tick_seconds
+        for _ in range(self._poisson_sample(expected)):
+            self._assign_one_request()
 
+    def _poisson_sample(self, lam: float) -> int:
+        # Knuth's algorithm. Adequate for the small lambda values
+        # (req_rate <= 0.5, tick_seconds <= ~2) this simulation produces.
+        if lam <= 0:
+            return 0
+        threshold = math.exp(-lam)
+        k = 0
+        p = 1.0
+        while p > threshold:
+            k += 1
+            p *= self.rng.random()
+        return k - 1
+
+    def _assign_one_request(self) -> None:
         request = sample_request(self.rng, self.profile, self.config.floors)
         elevator = min(
             self.elevators,
