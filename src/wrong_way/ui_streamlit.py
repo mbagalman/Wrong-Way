@@ -286,6 +286,8 @@ def render_app() -> None:
 
         floors = st.slider("Floors", min_value=6, max_value=40, key="floors")
         elevators = st.slider("Elevators", min_value=1, max_value=8, key="elevators")
+        if st.session_state.start_floor > floors - 1:
+            st.session_state.start_floor = floors - 1
         st.slider("Observer floor", min_value=0, max_value=floors - 1, key="start_floor")
         st.radio("Desired direction", options=["up", "down"], horizontal=True, key="desired_direction")
 
