@@ -39,3 +39,6 @@ ruff check .
 - `BatchSummary`
 
 These are defined in `src/wrong_way/config.py` and are treated as the shared contract across simulation, analytics, UI, and tests.
+
+## Design rationale
+For the original creative brief — motivation, mode design, metric definitions, tone — see [`DESIGN_NOTES.md`](DESIGN_NOTES.md).

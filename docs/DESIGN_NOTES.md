@@ -1,5 +1,10 @@
-# The Other Elevator Always Wins
-## Developer Guide for a Fun Teaching Simulation
+# Wrong-Way Design Notes
+
+> Original creative brief titled *"The Other Elevator Always Wins — Developer Guide for a Fun
+> Teaching Simulation."* Kept here as the design rationale behind the simulation (motivation,
+> tone, modes, metrics, teaching goals). For environment setup and running the project, see
+> [`DEVELOPER_GUIDE.md`](DEVELOPER_GUIDE.md). For the actionable ticket plan, see
+> [`../EPICS_AND_TICKETS.md`](../EPICS_AND_TICKETS.md).
 
 ### Purpose
 Build a small Python simulation that makes students *feel* the classic experience that “the other elevator” or “the other subway” always comes first, and then shows them why that feeling is mathematically understandable without requiring the universe to be personally insulting.

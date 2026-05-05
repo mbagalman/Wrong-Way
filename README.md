@@ -41,3 +41,8 @@ pytest
 - Elevator Mode is MVP.
 - Subway Mode is planned in V2.
 - Use fixed seeds for reproducibility in demos and tests.
+
+## Further reading
+- [`docs/DEVELOPER_GUIDE.md`](docs/DEVELOPER_GUIDE.md) — environment, run commands, debugging.
+- [`docs/DESIGN_NOTES.md`](docs/DESIGN_NOTES.md) — the original creative brief: motivation, modes, metrics, tone.
+- [`EPICS_AND_TICKETS.md`](EPICS_AND_TICKETS.md) — actionable ticket plan.
