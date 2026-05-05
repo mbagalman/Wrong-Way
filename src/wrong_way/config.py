@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Literal
+from typing import Any, Literal, TypedDict
 
 Direction = Literal["up", "down", "idle"]
 EventType = Literal[
@@ -15,6 +15,33 @@ EventType = Literal[
     "request_assigned",
     "tick",
 ]
+
+
+class ElevatorSnapshot(TypedDict):
+    """One elevator's instantaneous state, used by the building renderer."""
+
+    elevator_id: int
+    floor: int
+    direction: Direction
+    pending: int
+
+
+class BuildingRenderState(TypedDict):
+    """Minimal shape the building diagram renderer reads from."""
+
+    elevators: list[ElevatorSnapshot]
+    observer_floor: int
+
+
+class LiveState(BuildingRenderState):
+    """Full per-tick state surfaced by ``ElevatorSimulation.current_state``."""
+
+    time: float
+    desired_direction: Direction
+    wrong_way_passes: int
+    wrong_way_stops: int
+    max_streak: int
+    current_streak: int
 
 
 @dataclass(frozen=True)
@@ -121,7 +148,7 @@ class RunResult:
     complaint_strength_score: float
     rigged_system_belief_score: float
     event_log: list[Event]
-    arrival_snapshot: list[dict[str, Any]]
+    arrival_snapshot: list[ElevatorSnapshot]
     profile: str
 
 

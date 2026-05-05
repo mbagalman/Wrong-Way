@@ -13,7 +13,7 @@ import pandas as pd
 import streamlit as st
 
 from .analytics import build_frustration_heatmap, run_batch_for_observer
-from .config import ObserverConfig, SimulationConfig
+from .config import BuildingRenderState, ObserverConfig, SimulationConfig
 from .elevator_mode import ElevatorSimulation, desired_direction
 from .metrics import rage_score
 from .tone import TONE_PACK, complaint_generator, statistical_rebuttal
@@ -73,7 +73,7 @@ def _destination_options(floors: int, start_floor: int, direction: str) -> list[
 
 
 def _render_building_figure(
-    state: dict[str, object],
+    state: BuildingRenderState,
     floors: int,
     ax: plt.Axes | None = None,
 ) -> plt.Figure:
@@ -89,7 +89,7 @@ def _render_building_figure(
 
     elevators = state["elevators"]
     x_values = [e["elevator_id"] for e in elevators]
-    observer_floor = int(state["observer_floor"])
+    observer_floor = state["observer_floor"]
     depth_x = 0.16
     depth_y = 0.28
     shaft_width = 0.56
@@ -384,9 +384,9 @@ def render_app() -> None:
                     st.metric("Wait clock", f"{state['time']:.0f}s")
                     st.metric(
                         "Ghost Elevators",
-                        int(state["wrong_way_passes"]) + int(state["wrong_way_stops"]),
+                        state["wrong_way_passes"] + state["wrong_way_stops"],
                     )
-                    st.metric("Wrong-way streak", int(state["max_streak"]))
+                    st.metric("Wrong-way streak", state["max_streak"])
                     st.progress(min(100, int(rage)), text=f"Rage Meter: {rage:.0f}/100")
 
                 if speed > 0:

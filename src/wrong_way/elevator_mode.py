@@ -9,7 +9,9 @@ from typing import Literal
 
 from .config import (
     Direction,
+    ElevatorSnapshot,
     Event,
+    LiveState,
     ObserverConfig,
     RunResult,
     SimulationConfig,
@@ -503,7 +505,7 @@ class ElevatorSimulation:
             profile=self.profile,
         )
 
-    def _snapshot_elevator(self, elevator: ElevatorState) -> dict[str, int | str]:
+    def _snapshot_elevator(self, elevator: ElevatorState) -> ElevatorSnapshot:
         return {
             "elevator_id": elevator.elevator_id,
             "floor": elevator.current_floor,
@@ -511,7 +513,7 @@ class ElevatorSimulation:
             "pending": len(elevator.pending_stops),
         }
 
-    def current_state(self) -> dict[str, object]:
+    def current_state(self) -> LiveState:
         return {
             "time": self.clock.now,
             "elevators": [self._snapshot_elevator(e) for e in self.elevators],
