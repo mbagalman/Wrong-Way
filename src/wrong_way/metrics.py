@@ -57,9 +57,3 @@ def rigged_belief_score(
     if timed_out:
         score += 20
     return float(max(0, min(100, score)))
-
-
-def long_gap_hit(actual_wait_seconds: float, p90_wait: float) -> bool:
-    """Flag if the wait appears to have landed in a long interval."""
-
-    return actual_wait_seconds >= p90_wait

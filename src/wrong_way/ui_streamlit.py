@@ -440,7 +440,16 @@ def render_app() -> None:
         stat_cols[0].metric("Runs", summary.run_count)
         stat_cols[1].metric("P50 wait", f"{summary.percentile_p50_wait:.1f}s")
         stat_cols[2].metric("P90 wait", f"{summary.percentile_p90_wait:.1f}s")
-        stat_cols[3].metric("Long-gap hit rate", f"{summary.long_gap_hit_rate * 100:.1f}%")
+        stat_cols[3].metric(
+            f"Tail vs {summary.reference_profile}",
+            f"{summary.tail_share_vs_balanced * 100:.1f}%",
+            help=(
+                f"Share of {summary.profile} runs whose wait exceeded the P90 wait "
+                f"({summary.reference_p90_wait:.1f}s) of a parallel batch under "
+                f"{summary.reference_profile} demand. Above 10% means your scenario "
+                "produces tail-event waits more often than balanced demand would."
+            ),
+        )
 
         wait_fig = _render_wait_distribution(summary.actual_wait_seconds, summary.perceived_wait_seconds)
         st.pyplot(wait_fig)
@@ -496,5 +505,9 @@ def render_app() -> None:
         screenshot_panel.write(f"P50 wait: {summary.percentile_p50_wait:.1f}s\n")
         screenshot_panel.write(f"P90 wait: {summary.percentile_p90_wait:.1f}s\n")
         screenshot_panel.write(f"P95 wait: {summary.percentile_p95_wait:.1f}s\n")
-        screenshot_panel.write(f"Long-gap hit rate: {summary.long_gap_hit_rate * 100:.1f}%\n")
+        screenshot_panel.write(
+            f"Tail share vs {summary.reference_profile} "
+            f"(>= {summary.reference_p90_wait:.1f}s): "
+            f"{summary.tail_share_vs_balanced * 100:.1f}%\n"
+        )
         st.code(screenshot_panel.getvalue())

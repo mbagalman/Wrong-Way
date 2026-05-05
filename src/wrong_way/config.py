@@ -117,5 +117,7 @@ class BatchSummary:
     percentile_p50_wait: float
     percentile_p90_wait: float
     percentile_p95_wait: float
-    long_gap_hit_rate: float
+    reference_profile: str
+    reference_p90_wait: float
+    tail_share_vs_balanced: float
     heatmap_matrix: dict[str, list[float]]

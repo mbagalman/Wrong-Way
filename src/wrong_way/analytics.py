@@ -2,12 +2,20 @@
 
 from __future__ import annotations
 
-from dataclasses import asdict
+from dataclasses import asdict, replace
 import math
 from statistics import mean
 
 from .config import BatchSummary, ObserverConfig, SimulationConfig
 from .elevator_mode import DemandProfile, ElevatorSimulation
+
+# Anchor used by tail_share_vs_balanced. "Random Midday" is the closest thing
+# to symmetric demand we have, so it stands in for "what the wait distribution
+# would look like if the building wasn't structurally biased against you."
+REFERENCE_PROFILE: DemandProfile = "Random Midday"
+DEFAULT_REFERENCE_TRIALS_CAP = 500
+# Disjoint seed range so reference seeds never collide with user-batch seeds.
+_REFERENCE_SEED_OFFSET = 10_000_000
 
 
 def percentile(values: list[float], pct: float) -> float:
@@ -25,12 +33,28 @@ def percentile(values: list[float], pct: float) -> float:
     return float(ordered[low] * (1 - weight) + ordered[high] * weight)
 
 
+def _reference_p90_wait(
+    config: SimulationConfig,
+    observer: ObserverConfig,
+    trials: int,
+) -> float:
+    base_seed = (config.seed or 0) + _REFERENCE_SEED_OFFSET
+    waits: list[float] = []
+    for idx in range(trials):
+        run_config = replace(config, seed=base_seed + idx)
+        sim = ElevatorSimulation(run_config, observer, REFERENCE_PROFILE)
+        result = sim.run()
+        waits.append(result.actual_wait_seconds)
+    return percentile(waits, 0.9)
+
+
 def run_batch_for_observer(
     config: SimulationConfig,
     observer: ObserverConfig,
     profile: DemandProfile,
     trials: int = 1000,
     seed_offset: int = 0,
+    reference_trials: int | None = None,
 ) -> BatchSummary:
     actual_waits: list[float] = []
     perceived_waits: list[float] = []
@@ -41,16 +65,7 @@ def run_batch_for_observer(
     base_seed = config.seed or 0
 
     for idx in range(trials):
-        run_config = SimulationConfig(
-            floors=config.floors,
-            elevators=config.elevators,
-            tick_seconds=config.tick_seconds,
-            max_wait_seconds=config.max_wait_seconds,
-            seed=base_seed + seed_offset + idx,
-            travel_time_per_floor=config.travel_time_per_floor,
-            door_dwell_seconds=config.door_dwell_seconds,
-            perceived_coeffs=config.perceived_coeffs,
-        )
+        run_config = replace(config, seed=base_seed + seed_offset + idx)
         sim = ElevatorSimulation(run_config, observer, profile)
         result = sim.run()
         actual_waits.append(result.actual_wait_seconds)
@@ -63,9 +78,17 @@ def run_batch_for_observer(
     p90 = percentile(actual_waits, 0.9)
     p95 = percentile(actual_waits, 0.95)
 
-    long_gap_rate = (
-        sum(1 for wait in actual_waits if wait >= p90) / len(actual_waits) if actual_waits else 0.0
+    n_reference = (
+        reference_trials
+        if reference_trials is not None
+        else min(DEFAULT_REFERENCE_TRIALS_CAP, trials)
     )
+    reference_p90 = _reference_p90_wait(config, observer, n_reference)
+
+    if reference_p90 <= 0 or not actual_waits:
+        tail_share = 0.0
+    else:
+        tail_share = sum(1 for w in actual_waits if w >= reference_p90) / len(actual_waits)
 
     return BatchSummary(
         profile=profile,
@@ -78,7 +101,9 @@ def run_batch_for_observer(
         percentile_p50_wait=p50,
         percentile_p90_wait=p90,
         percentile_p95_wait=p95,
-        long_gap_hit_rate=long_gap_rate,
+        reference_profile=REFERENCE_PROFILE,
+        reference_p90_wait=reference_p90,
+        tail_share_vs_balanced=tail_share,
         heatmap_matrix={"up": [], "down": []},
     )
 
