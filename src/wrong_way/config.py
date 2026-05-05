@@ -120,4 +120,3 @@ class BatchSummary:
     reference_profile: str
     reference_p90_wait: float
     tail_share_vs_balanced: float
-    heatmap_matrix: dict[str, list[float]]

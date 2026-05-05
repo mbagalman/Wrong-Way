@@ -104,7 +104,6 @@ def run_batch_for_observer(
         reference_profile=REFERENCE_PROFILE,
         reference_p90_wait=reference_p90,
         tail_share_vs_balanced=tail_share,
-        heatmap_matrix={"up": [], "down": []},
     )
 
 
