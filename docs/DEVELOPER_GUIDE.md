@@ -20,8 +20,10 @@ streamlit run app.py
 - Use fixed seeds for reproducible bug reports.
 - To debug one run quickly:
 ```bash
-python main.py
+python main.py        # repo-root shim
+wrong-way-cli         # installed console script (after pip install -e .)
 ```
+Both invoke `wrong_way.cli.main` — they print the same seven-line summary.
 
 ## Test commands
 ```bash
