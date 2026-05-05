@@ -71,8 +71,18 @@ def _destination_options(floors: int, start_floor: int, direction: str) -> list[
     return list(range(0, start_floor))
 
 
-def _render_building_figure(state: dict[str, object], floors: int) -> plt.Figure:
-    fig, ax = plt.subplots(figsize=(4.6, 6.4))
+def _render_building_figure(
+    state: dict[str, object],
+    floors: int,
+    ax: plt.Axes | None = None,
+) -> plt.Figure:
+    if ax is None:
+        fig, ax = plt.subplots(figsize=(4.6, 6.4))
+    else:
+        # Reuse path: clear the existing axes and redraw onto the same figure.
+        # Avoids per-tick figure allocation in the live playback loop.
+        ax.clear()
+        fig = ax.figure
     fig.patch.set_facecolor("#F4EBD0")
     ax.set_facecolor("#F8F2E4")
 
@@ -354,28 +364,34 @@ def render_app() -> None:
         chart_placeholder = live_col.empty()
         stats_placeholder = stats_col.empty()
 
-        while not sim.done:
-            has_step = sim.step()
-            if not has_step:
-                break
-            state = sim.current_state()
-            fig = _render_building_figure(state, floors=floors)
-            chart_placeholder.pyplot(fig)
-            plt.close(fig)
+        live_fig, live_ax = plt.subplots(figsize=(4.6, 6.4))
+        try:
+            while not sim.done:
+                has_step = sim.step()
+                if not has_step:
+                    break
+                state = sim.current_state()
+                _render_building_figure(state, floors=floors, ax=live_ax)
+                chart_placeholder.pyplot(live_fig)
 
-            rage = rage_score(
-                wrong_way_passes=state["wrong_way_passes"],
-                wrong_way_stops=state["wrong_way_stops"],
-                max_streak=state["max_streak"],
-            )
-            with stats_placeholder.container():
-                st.metric("Wait clock", f"{state['time']:.0f}s")
-                st.metric("Ghost Elevators", int(state["wrong_way_passes"]) + int(state["wrong_way_stops"]))
-                st.metric("Wrong-way streak", int(state["max_streak"]))
-                st.progress(min(100, int(rage)), text=f"Rage Meter: {rage:.0f}/100")
+                rage = rage_score(
+                    wrong_way_passes=state["wrong_way_passes"],
+                    wrong_way_stops=state["wrong_way_stops"],
+                    max_streak=state["max_streak"],
+                )
+                with stats_placeholder.container():
+                    st.metric("Wait clock", f"{state['time']:.0f}s")
+                    st.metric(
+                        "Ghost Elevators",
+                        int(state["wrong_way_passes"]) + int(state["wrong_way_stops"]),
+                    )
+                    st.metric("Wrong-way streak", int(state["max_streak"]))
+                    st.progress(min(100, int(rage)), text=f"Rage Meter: {rage:.0f}/100")
 
-            if speed > 0:
-                time.sleep(speed)
+                if speed > 0:
+                    time.sleep(speed)
+        finally:
+            plt.close(live_fig)
 
         result = sim.run()
         wrong_way_total = result.wrong_way_passes + result.wrong_way_stops
