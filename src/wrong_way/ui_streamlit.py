@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 import io
 import time
 
@@ -480,16 +481,7 @@ def render_app() -> None:
         plt.close(heatmap_fig)
 
         sampled_sim = ElevatorSimulation(
-            config=SimulationConfig(
-                floors=config.floors,
-                elevators=config.elevators,
-                tick_seconds=config.tick_seconds,
-                max_wait_seconds=config.max_wait_seconds,
-                seed=(config.seed or 0) + 999,
-                travel_time_per_floor=config.travel_time_per_floor,
-                door_dwell_seconds=config.door_dwell_seconds,
-                perceived_coeffs=config.perceived_coeffs,
-            ),
+            config=replace(config, seed=(config.seed or 0) + 999),
             observer=observer,
             profile=st.session_state.profile,
         )

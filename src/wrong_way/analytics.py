@@ -139,16 +139,7 @@ def build_frustration_heatmap(
             base_seed = (config.seed or 0) + floor * 100 + (0 if direction == "up" else 50_000)
 
             for trial in range(trials_per_cell):
-                run_config = SimulationConfig(
-                    floors=config.floors,
-                    elevators=config.elevators,
-                    tick_seconds=config.tick_seconds,
-                    max_wait_seconds=config.max_wait_seconds,
-                    seed=base_seed + trial,
-                    travel_time_per_floor=config.travel_time_per_floor,
-                    door_dwell_seconds=config.door_dwell_seconds,
-                    perceived_coeffs=config.perceived_coeffs,
-                )
+                run_config = replace(config, seed=base_seed + trial)
                 sim = ElevatorSimulation(run_config, observer, profile)
                 result = sim.run()
                 values.append(result.wrong_way_passes + result.wrong_way_stops)
