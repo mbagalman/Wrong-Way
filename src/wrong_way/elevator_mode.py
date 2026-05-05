@@ -7,7 +7,14 @@ import math
 import random
 from typing import Literal
 
-from .config import Direction, Event, ObserverConfig, RunResult, SimulationConfig
+from .config import (
+    Direction,
+    Event,
+    ObserverConfig,
+    RunResult,
+    SimulationConfig,
+    validate_observer_against_config,
+)
 from .metrics import (
     complaint_strength_score,
     perceived_wait_seconds,
@@ -116,16 +123,12 @@ class ElevatorSimulation:
         observer: ObserverConfig,
         profile: DemandProfile = "Morning Rush",
     ) -> None:
+        validate_observer_against_config(observer, config)
         self.config = config
         self.observer = observer
         self.profile = profile
         self.rng = random.Random(config.seed)
         self.clock = SimulationClock()
-
-        if observer.start_floor < 0 or observer.start_floor >= config.floors:
-            raise ValueError("observer start_floor out of bounds")
-        if observer.destination_floor < 0 or observer.destination_floor >= config.floors:
-            raise ValueError("observer destination_floor out of bounds")
 
         self.elevators = self._initial_elevators(config)
         self.event_log: list[Event] = []

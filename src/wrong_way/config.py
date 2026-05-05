@@ -70,6 +70,28 @@ class ObserverConfig:
             raise ValueError("desired_direction must be 'up' or 'down'")
 
 
+def validate_observer_against_config(
+    observer: ObserverConfig, config: SimulationConfig
+) -> None:
+    """Raise ``ValueError`` if the observer references floors outside the building.
+
+    Floor bounds need both objects, which is why this lives outside
+    ``ObserverConfig.__post_init__``. Call it from any entrypoint that builds
+    a sim or batch from caller-supplied configs.
+    """
+
+    top = config.floors - 1
+    if not 0 <= observer.start_floor <= top:
+        raise ValueError(
+            f"observer start_floor {observer.start_floor} out of range [0, {top}]"
+        )
+    if not 0 <= observer.destination_floor <= top:
+        raise ValueError(
+            f"observer destination_floor {observer.destination_floor} "
+            f"out of range [0, {top}]"
+        )
+
+
 @dataclass(frozen=True)
 class Event:
     """Single event in the run log."""

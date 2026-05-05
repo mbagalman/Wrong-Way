@@ -8,6 +8,7 @@ from .config import (
     PerceivedCoefficients,
     RunResult,
     SimulationConfig,
+    validate_observer_against_config,
 )
 from .elevator_mode import ElevatorSimulation
 
@@ -21,4 +22,5 @@ __all__ = [
     "ElevatorSimulation",
     "build_frustration_heatmap",
     "run_batch_for_observer",
+    "validate_observer_against_config",
 ]
