@@ -250,9 +250,13 @@ class ElevatorSimulation:
 
         elevator.pending_stops.add(request.origin)
         elevator.pending_stops.add(request.destination)
+        immediate_pickup = request.origin == elevator.current_floor
 
         if elevator.direction == "idle":
-            elevator.direction = "up" if request.origin > elevator.current_floor else "down"
+            # When boarding immediately, anchor on the destination so the
+            # post-pickup direction matches where the rider is going.
+            anchor = request.destination if immediate_pickup else request.origin
+            elevator.direction = "up" if anchor > elevator.current_floor else "down"
 
         self.event_log.append(
             Event(
@@ -265,6 +269,33 @@ class ElevatorSimulation:
                     "origin": request.origin,
                     "destination": request.destination,
                 },
+            )
+        )
+
+        if immediate_pickup:
+            self._open_doors_at_current_floor(elevator)
+
+    def _open_doors_at_current_floor(self, elevator: ElevatorState) -> None:
+        elevator.pending_stops.discard(elevator.current_floor)
+        if elevator.door_timer > 0:
+            # Boarding during an existing dwell: rider just walks in.
+            # The dwell event already fired observer interaction and stop log.
+            return
+        elevator.door_timer = self.config.door_dwell_seconds
+        self._record_observer_interaction(elevator, is_stop=True)
+        self.event_log.append(
+            Event(
+                timestamp=self.clock.now,
+                event_type="stop",
+                elevator_id=elevator.elevator_id,
+                floor=elevator.current_floor,
+                direction=elevator.direction,
+                is_wrong_way=is_wrong_way_event(
+                    self.observer.desired_direction,
+                    elevator.direction,
+                )
+                and elevator.current_floor == self.observer.start_floor,
+                is_stop=True,
             )
         )
 
