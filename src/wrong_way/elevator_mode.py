@@ -431,11 +431,10 @@ class ElevatorSimulation:
 
         self._max_streak = max(self._max_streak, self._current_streak)
 
-        can_serve = (
-            is_stop
-            and not wrong_way
-            and elevator.direction == self.observer.desired_direction
-        )
+        # observer.desired_direction is validated up/down and stop events only
+        # fire with elevator.direction in (up, down), so `not wrong_way` here
+        # already implies elevator.direction == observer.desired_direction.
+        can_serve = is_stop and not wrong_way
 
         if can_serve:
             self._served = True
