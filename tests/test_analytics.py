@@ -6,11 +6,26 @@ def test_heatmap_shape_and_non_negative_values() -> None:
     config = SimulationConfig(floors=12, elevators=2, seed=7)
     heatmap = build_frustration_heatmap(config=config, profile="Random Midday", trials_per_cell=8)
 
-    assert set(heatmap.keys()) == {"up", "down"}
-    assert len(heatmap["up"]) == 12
-    assert len(heatmap["down"]) == 12
-    assert all(value >= 0 for value in heatmap["up"])
-    assert all(value >= 0 for value in heatmap["down"])
+    for matrix in (heatmap.wrong_way_encounters, heatmap.perceived_wait_inflation):
+        assert set(matrix.keys()) == {"up", "down"}
+        assert len(matrix["up"]) == 12
+        assert len(matrix["down"]) == 12
+        assert all(value >= 0 for value in matrix["up"])
+        assert all(value >= 0 for value in matrix["down"])
+
+
+def test_heatmap_perceived_inflation_dominates_in_morning_rush_mid_band() -> None:
+    # The inflation matrix should pick up the same asymmetry the wrong-way
+    # matrix does, but expressed in seconds rather than encounter counts.
+    # Mid-band up under Morning Rush is the canonical hot cell.
+    config = SimulationConfig(floors=20, elevators=3, seed=11, max_wait_seconds=240.0)
+    heatmap = build_frustration_heatmap(
+        config=config, profile="Morning Rush", trials_per_cell=12
+    )
+    mid = config.floors // 2
+    bottom = 1
+    up = heatmap.perceived_wait_inflation["up"]
+    assert up[mid] > up[bottom]
 
 
 def test_batch_summary_counts() -> None:

@@ -6,7 +6,7 @@ from dataclasses import asdict, replace
 import math
 from statistics import mean
 
-from .config import BatchSummary, ObserverConfig, SimulationConfig
+from .config import BatchSummary, FrustrationHeatmap, ObserverConfig, SimulationConfig
 from .elevator_mode import DemandProfile, ElevatorSimulation
 
 # Anchor used by tail_share_vs_balanced. "Random Midday" is the closest thing
@@ -111,10 +111,19 @@ def build_frustration_heatmap(
     config: SimulationConfig,
     profile: DemandProfile,
     trials_per_cell: int = 50,
-) -> dict[str, list[float]]:
-    """Average wrong-way encounters by floor and desired direction."""
+) -> FrustrationHeatmap:
+    """Run a Monte Carlo sweep across (direction × floor) and capture two metrics.
 
-    heatmap: dict[str, list[float]] = {
+    Both metrics come from the same trials, so this is one trial loop, two
+    teaching surfaces: average wrong-way encounters per run, and average
+    perceived-wait inflation (perceived − actual seconds) per run.
+    """
+
+    encounters: dict[str, list[float]] = {
+        "up": [0.0 for _ in range(config.floors)],
+        "down": [0.0 for _ in range(config.floors)],
+    }
+    inflation: dict[str, list[float]] = {
         "up": [0.0 for _ in range(config.floors)],
         "down": [0.0 for _ in range(config.floors)],
     }
@@ -122,10 +131,8 @@ def build_frustration_heatmap(
     for floor in range(config.floors):
         for direction in ("up", "down"):
             if direction == "up" and floor >= config.floors - 1:
-                heatmap[direction][floor] = 0.0
                 continue
             if direction == "down" and floor <= 0:
-                heatmap[direction][floor] = 0.0
                 continue
 
             destination = floor + 1 if direction == "up" else floor - 1
@@ -135,18 +142,27 @@ def build_frustration_heatmap(
                 desired_direction=direction,
             )
 
-            values: list[float] = []
+            encounter_values: list[float] = []
+            inflation_values: list[float] = []
             base_seed = (config.seed or 0) + floor * 100 + (0 if direction == "up" else 50_000)
 
             for trial in range(trials_per_cell):
                 run_config = replace(config, seed=base_seed + trial)
                 sim = ElevatorSimulation(run_config, observer, profile)
                 result = sim.run()
-                values.append(result.wrong_way_passes + result.wrong_way_stops)
+                encounter_values.append(result.wrong_way_passes + result.wrong_way_stops)
+                inflation_values.append(
+                    result.perceived_wait_seconds - result.actual_wait_seconds
+                )
 
-            heatmap[direction][floor] = mean(values) if values else 0.0
+            if encounter_values:
+                encounters[direction][floor] = mean(encounter_values)
+                inflation[direction][floor] = mean(inflation_values)
 
-    return heatmap
+    return FrustrationHeatmap(
+        wrong_way_encounters=encounters,
+        perceived_wait_inflation=inflation,
+    )
 
 
 def to_dict(summary: BatchSummary) -> dict[str, object]:

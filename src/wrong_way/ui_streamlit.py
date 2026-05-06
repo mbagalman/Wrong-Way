@@ -236,15 +236,21 @@ def _render_building_figure(
     return fig
 
 
-def _render_heatmap(heatmap: dict[str, list[float]]) -> plt.Figure:
+def _render_heatmap(
+    heatmap: dict[str, list[float]],
+    title: str = "Frustration Heatmap (avg wrong-way encounters)",
+    cbar_label: str | None = None,
+) -> plt.Figure:
     fig, ax = plt.subplots(figsize=(10, 2.8))
     data = [heatmap["up"], heatmap["down"]]
     im = ax.imshow(data, aspect="auto", cmap="YlOrRd")
     ax.set_yticks([0, 1])
     ax.set_yticklabels(["Up", "Down"])
     ax.set_xlabel("Observer Floor")
-    ax.set_title("Frustration Heatmap (avg wrong-way encounters)")
-    fig.colorbar(im, ax=ax, fraction=0.03, pad=0.02)
+    ax.set_title(title)
+    cbar = fig.colorbar(im, ax=ax, fraction=0.03, pad=0.02)
+    if cbar_label:
+        cbar.set_label(cbar_label)
     fig.tight_layout()
     return fig
 
@@ -542,9 +548,21 @@ def render_app() -> None:
         st.pyplot(streak_fig)
         plt.close(streak_fig)
 
-        heatmap_fig = _render_heatmap(heatmap)
-        st.pyplot(heatmap_fig)
-        plt.close(heatmap_fig)
+        encounters_fig = _render_heatmap(
+            heatmap.wrong_way_encounters,
+            title="Frustration Heatmap (avg wrong-way encounters)",
+            cbar_label="encounters",
+        )
+        st.pyplot(encounters_fig)
+        plt.close(encounters_fig)
+
+        inflation_fig = _render_heatmap(
+            heatmap.perceived_wait_inflation,
+            title="Perceived-Wait Inflation (avg perceived − actual seconds)",
+            cbar_label="seconds",
+        )
+        st.pyplot(inflation_fig)
+        plt.close(inflation_fig)
 
         sampled_sim = ElevatorSimulation(
             config=replace(config, seed=(config.seed or 0) + 999),

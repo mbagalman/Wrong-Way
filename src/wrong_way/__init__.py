@@ -4,6 +4,7 @@ from .analytics import build_frustration_heatmap, run_batch_for_observer
 from .config import (
     BatchSummary,
     Event,
+    FrustrationHeatmap,
     ObserverConfig,
     PerceivedCoefficients,
     RunResult,
@@ -15,6 +16,7 @@ from .elevator_mode import ElevatorSimulation
 __all__ = [
     "BatchSummary",
     "Event",
+    "FrustrationHeatmap",
     "ObserverConfig",
     "PerceivedCoefficients",
     "RunResult",

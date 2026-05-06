@@ -154,6 +154,22 @@ class RunResult:
 
 
 @dataclass(frozen=True)
+class FrustrationHeatmap:
+    """Two metric matrices over (desired direction × observer floor).
+
+    Both come from the same Monte Carlo sweep, so they're paired in one
+    object — same trial cost, two different ways to read the asymmetry.
+
+    - ``wrong_way_encounters[direction][floor]``: avg ``passes + stops`` per run.
+    - ``perceived_wait_inflation[direction][floor]``: avg ``perceived - actual``
+      seconds per run; the perceived-time penalty teaching metric.
+    """
+
+    wrong_way_encounters: dict[str, list[float]]
+    perceived_wait_inflation: dict[str, list[float]]
+
+
+@dataclass(frozen=True)
 class BatchSummary:
     """Batch-level analytics for many runs."""
 
