@@ -97,6 +97,43 @@ class ObserverConfig:
             raise ValueError("desired_direction must be 'up' or 'down'")
 
 
+@dataclass(frozen=True)
+class SubwayConfig:
+    """Two-direction Poisson arrival platform configuration.
+
+    Each direction has its own rate (arrivals per second). Rates are kept
+    independent rather than tied to a single ratio so asymmetric scenarios
+    can be expressed naturally — "uptown one every 90s, downtown one every
+    30s" for example.
+    """
+
+    desired_direction_rate: float = 1.0 / 90.0
+    other_direction_rate: float = 1.0 / 60.0
+    max_wait_seconds: float = 600.0
+    seed: int | None = None
+    perceived_coeffs: PerceivedCoefficients = field(default_factory=PerceivedCoefficients)
+
+    def __post_init__(self) -> None:
+        if self.desired_direction_rate <= 0:
+            raise ValueError("desired_direction_rate must be > 0")
+        if self.other_direction_rate <= 0:
+            raise ValueError("other_direction_rate must be > 0")
+        if self.max_wait_seconds <= 0:
+            raise ValueError("max_wait_seconds must be > 0")
+
+
+@dataclass(frozen=True)
+class SubwayObserver:
+    """Commuter on a platform wanting one direction."""
+
+    desired_direction: Direction = "up"
+    arrival_time: float = 0.0
+
+    def __post_init__(self) -> None:
+        if self.desired_direction not in ("up", "down"):
+            raise ValueError("desired_direction must be 'up' or 'down'")
+
+
 def validate_observer_against_config(
     observer: ObserverConfig, config: SimulationConfig
 ) -> None:

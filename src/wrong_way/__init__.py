@@ -9,9 +9,12 @@ from .config import (
     PerceivedCoefficients,
     RunResult,
     SimulationConfig,
+    SubwayConfig,
+    SubwayObserver,
     validate_observer_against_config,
 )
 from .elevator_mode import ElevatorSimulation
+from .subway_mode import SubwaySimulation
 
 __all__ = [
     "BatchSummary",
@@ -21,7 +24,10 @@ __all__ = [
     "PerceivedCoefficients",
     "RunResult",
     "SimulationConfig",
+    "SubwayConfig",
+    "SubwayObserver",
     "ElevatorSimulation",
+    "SubwaySimulation",
     "build_frustration_heatmap",
     "run_batch_for_observer",
     "validate_observer_against_config",
