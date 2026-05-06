@@ -150,6 +150,7 @@ class RunResult:
     event_log: list[Event]
     arrival_snapshot: list[ElevatorSnapshot]
     profile: str
+    state_log: list[LiveState] = field(default_factory=list)
 
 
 @dataclass(frozen=True)

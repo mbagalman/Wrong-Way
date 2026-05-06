@@ -143,6 +143,7 @@ class ElevatorSimulation:
         self._max_streak = 0
 
         self.arrival_snapshot = [self._snapshot_elevator(e) for e in self.elevators]
+        self.state_log: list[LiveState] = [self.current_state()]
         self.clock.schedule(max(0.0, observer.arrival_time), self._tick)
 
     @property
@@ -174,6 +175,7 @@ class ElevatorSimulation:
         self.clock.run_until(lambda: self.done)
         if not self.done:
             self._mark_timeout()
+            self.state_log.append(self.current_state())
         return self._build_result()
 
     def _initial_elevators(self, config: SimulationConfig) -> list[ElevatorState]:
@@ -200,6 +202,7 @@ class ElevatorSimulation:
         elapsed = self.current_wait_seconds
         if elapsed >= self.config.max_wait_seconds:
             self._mark_timeout()
+            self.state_log.append(self.current_state())
             return
 
         self.event_log.append(
@@ -219,6 +222,8 @@ class ElevatorSimulation:
             self._process_elevator(elevator)
             if self.done:
                 break
+
+        self.state_log.append(self.current_state())
 
         if not self.done:
             self.clock.schedule(self.config.tick_seconds, self._tick)
@@ -502,6 +507,7 @@ class ElevatorSimulation:
             event_log=self.event_log,
             arrival_snapshot=self.arrival_snapshot,
             profile=self.profile,
+            state_log=self.state_log,
         )
 
     def _snapshot_elevator(self, elevator: ElevatorState) -> ElevatorSnapshot:

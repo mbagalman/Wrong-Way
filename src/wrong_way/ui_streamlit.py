@@ -13,7 +13,7 @@ import pandas as pd
 import streamlit as st
 
 from .analytics import build_frustration_heatmap, run_batch_for_observer
-from .config import BuildingRenderState, ObserverConfig, SimulationConfig
+from .config import BuildingRenderState, Event, ObserverConfig, RunResult, SimulationConfig
 from .elevator_mode import ElevatorSimulation, desired_direction
 from .metrics import rage_score
 from .tone import TONE_PACK, complaint_generator, statistical_rebuttal
@@ -282,6 +282,62 @@ def _tone_line(result_wrong_way_total: int, streak: int) -> str:
     return TONE_PACK[idx]
 
 
+def _format_event(event: Event) -> str:
+    car = f" car {event.elevator_id}" if event.elevator_id is not None else ""
+    floor = f" @ floor {event.floor}" if event.floor is not None else ""
+    flag = " (wrong-way)" if event.is_wrong_way else ""
+    return f"`t={event.timestamp:>5.1f}s` {event.event_type}{car}{floor}{flag}"
+
+
+def _render_replay_panel(result: RunResult, floors: int) -> None:
+    """Scrub-through replay of the most recent live run.
+
+    Walks ``result.state_log`` (one entry per tick, captured at end of tick)
+    and re-renders the building diagram for the selected snapshot. Recent
+    events up to that timestamp are listed alongside so the user can see
+    *what just happened* at any point.
+    """
+
+    if not result.state_log:
+        return
+
+    with st.expander("Replay this run", expanded=False):
+        last_idx = len(result.state_log) - 1
+        st.caption(
+            f"Scrub through the {last_idx + 1} ticks of this run. "
+            "0 is the moment you arrived; the final index is when you were served or timed out."
+        )
+        tick_idx = st.slider(
+            "Tick",
+            min_value=0,
+            max_value=last_idx,
+            value=last_idx,
+            key="replay_tick",
+        )
+        state = result.state_log[tick_idx]
+
+        replay_fig, replay_ax = plt.subplots(figsize=(4.6, 6.4))
+        try:
+            _render_building_figure(state, floors=floors, ax=replay_ax)
+            chart_col, info_col = st.columns([1, 1])
+            chart_col.pyplot(replay_fig)
+            with info_col:
+                st.metric("Sim time", f"{state['time']:.0f}s")
+                ghost_total = state["wrong_way_passes"] + state["wrong_way_stops"]
+                st.metric("Ghost Elevators so far", ghost_total)
+                st.metric("Wrong-way streak so far", state["max_streak"])
+                horizon = state["time"] + 1e-9
+                relevant = [e for e in result.event_log if e.timestamp <= horizon]
+                if relevant:
+                    st.markdown("**Recent events**")
+                    for event in relevant[-6:]:
+                        st.markdown(f"- {_format_event(event)}")
+                else:
+                    st.caption("No events yet — observer just arrived.")
+        finally:
+            plt.close(replay_fig)
+
+
 def render_app() -> None:
     st.set_page_config(page_title="Wrong-Way", page_icon="⬆️⬇️", layout="wide")
     _set_default_state()
@@ -423,6 +479,16 @@ def render_app() -> None:
         st.dataframe(pd.DataFrame(result.arrival_snapshot), use_container_width=True)
 
         st.session_state.rigged_history.append(result.rigged_system_belief_score)
+        st.session_state.last_run = result
+        st.session_state.last_run_floors = floors
+        # Reset replay slider so new runs default to "show the final tick".
+        st.session_state.pop("replay_tick", None)
+
+    if "last_run" in st.session_state and st.session_state.last_run.state_log:
+        _render_replay_panel(
+            st.session_state.last_run,
+            st.session_state.last_run_floors,
+        )
 
     st.subheader("Rigged Belief Trend")
     if st.session_state.rigged_history:
