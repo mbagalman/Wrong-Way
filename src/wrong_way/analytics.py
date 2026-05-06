@@ -6,7 +6,14 @@ from dataclasses import asdict, replace
 import math
 from statistics import mean
 
-from .config import BatchSummary, FrustrationHeatmap, ObserverConfig, SimulationConfig
+from .config import (
+    BatchSummary,
+    ElevatorTrajectory,
+    FrustrationHeatmap,
+    GodModeSample,
+    ObserverConfig,
+    SimulationConfig,
+)
 from .elevator_mode import DemandProfile, ElevatorSimulation
 
 # Anchor used by tail_share_vs_balanced. "Random Midday" is the closest thing
@@ -14,8 +21,10 @@ from .elevator_mode import DemandProfile, ElevatorSimulation
 # would look like if the building wasn't structurally biased against you."
 REFERENCE_PROFILE: DemandProfile = "Random Midday"
 DEFAULT_REFERENCE_TRIALS_CAP = 500
-# Disjoint seed range so reference seeds never collide with user-batch seeds.
+# Disjoint seed offsets so derived seed ranges never collide with each other
+# or with user-batch seeds.
 _REFERENCE_SEED_OFFSET = 10_000_000
+_GOD_MODE_SEED_OFFSET = 20_000_000
 
 
 def percentile(values: list[float], pct: float) -> float:
@@ -163,6 +172,46 @@ def build_frustration_heatmap(
         wrong_way_encounters=encounters,
         perceived_wait_inflation=inflation,
     )
+
+
+def sample_god_mode_trajectories(
+    config: SimulationConfig,
+    observer: ObserverConfig,
+    profile: DemandProfile,
+    n_samples: int = 40,
+) -> list[GodModeSample]:
+    """Run ``n_samples`` independent sims and extract per-elevator trajectories.
+
+    The returned list is what the God Mode overlay renders translucently:
+    one floor-over-time trace per elevator per run. Each sim's ``state_log``
+    is already populated as part of the existing run, so this is essentially
+    free on top of the simulation cost itself.
+    """
+
+    base_seed = (config.seed or 0) + _GOD_MODE_SEED_OFFSET
+    samples: list[GodModeSample] = []
+    for idx in range(n_samples):
+        run_config = replace(config, seed=base_seed + idx)
+        sim = ElevatorSimulation(run_config, observer, profile)
+        result = sim.run()
+        trajectories: list[ElevatorTrajectory] = []
+        for elev_idx in range(config.elevators):
+            times = [snapshot["time"] for snapshot in result.state_log]
+            floors = [
+                snapshot["elevators"][elev_idx]["floor"]
+                for snapshot in result.state_log
+            ]
+            trajectories.append(ElevatorTrajectory(times=times, floors=floors))
+        samples.append(
+            GodModeSample(
+                elevators=trajectories,
+                observer_floor=observer.start_floor,
+                observer_desired_direction=observer.desired_direction,
+                served_time=result.actual_wait_seconds if result.served else None,
+                timed_out=result.timed_out,
+            )
+        )
+    return samples
 
 
 def to_dict(summary: BatchSummary) -> dict[str, object]:

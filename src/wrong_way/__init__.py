@@ -1,10 +1,16 @@
 """Wrong-Way simulation package."""
 
-from .analytics import build_frustration_heatmap, run_batch_for_observer
+from .analytics import (
+    build_frustration_heatmap,
+    run_batch_for_observer,
+    sample_god_mode_trajectories,
+)
 from .config import (
     BatchSummary,
+    ElevatorTrajectory,
     Event,
     FrustrationHeatmap,
+    GodModeSample,
     ObserverConfig,
     PerceivedCoefficients,
     RunResult,
@@ -18,8 +24,10 @@ from .subway_mode import SubwaySimulation
 
 __all__ = [
     "BatchSummary",
+    "ElevatorTrajectory",
     "Event",
     "FrustrationHeatmap",
+    "GodModeSample",
     "ObserverConfig",
     "PerceivedCoefficients",
     "RunResult",
@@ -30,5 +38,6 @@ __all__ = [
     "SubwaySimulation",
     "build_frustration_heatmap",
     "run_batch_for_observer",
+    "sample_god_mode_trajectories",
     "validate_observer_against_config",
 ]

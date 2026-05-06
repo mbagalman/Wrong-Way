@@ -191,6 +191,29 @@ class RunResult:
 
 
 @dataclass(frozen=True)
+class ElevatorTrajectory:
+    """One elevator's floor-over-time trace from a single run.
+
+    ``times[i]`` and ``floors[i]`` are paired; the lists share the same
+    cadence as ``RunResult.state_log`` (one entry per tick).
+    """
+
+    times: list[float]
+    floors: list[int]
+
+
+@dataclass(frozen=True)
+class GodModeSample:
+    """One sampled run's trajectory bundle, ready to draw on the overlay."""
+
+    elevators: list[ElevatorTrajectory]
+    observer_floor: int
+    observer_desired_direction: Direction
+    served_time: float | None
+    timed_out: bool
+
+
+@dataclass(frozen=True)
 class FrustrationHeatmap:
     """Two metric matrices over (desired direction × observer floor).
 

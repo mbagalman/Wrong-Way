@@ -12,10 +12,15 @@ from matplotlib.patches import Polygon, Rectangle
 import pandas as pd
 import streamlit as st
 
-from .analytics import build_frustration_heatmap, run_batch_for_observer
+from .analytics import (
+    build_frustration_heatmap,
+    run_batch_for_observer,
+    sample_god_mode_trajectories,
+)
 from .config import (
     BuildingRenderState,
     Event,
+    GodModeSample,
     ObserverConfig,
     RunResult,
     SimulationConfig,
@@ -358,6 +363,80 @@ def _render_subway_timeline(result: RunResult, max_wait: float) -> plt.Figure:
     return fig
 
 
+def _render_god_mode_overlay(
+    samples: list[GodModeSample],
+    floors: int,
+) -> plt.Figure:
+    """Translucent overlay of every sampled run's elevator trajectories.
+
+    Each line is one elevator's floor-over-time path through one run. With
+    enough samples laid on top of each other, the structural directional
+    bias becomes visible: you can see where the system spends its time
+    instead of inferring it from aggregate stats.
+    """
+
+    fig, ax = plt.subplots(figsize=(10, 5.2))
+    fig.patch.set_facecolor("#F4EBD0")
+    ax.set_facecolor("#F8F2E4")
+
+    line_alpha = max(0.04, min(0.20, 4.0 / max(1, len(samples))))
+    for sample in samples:
+        for trajectory in sample.elevators:
+            ax.plot(
+                trajectory.times,
+                trajectory.floors,
+                color="#2E86AB",
+                alpha=line_alpha,
+                linewidth=0.8,
+            )
+
+    if samples:
+        observer_floor = samples[0].observer_floor
+        ax.axhline(
+            observer_floor,
+            color="#D7263D",
+            linestyle="--",
+            alpha=0.65,
+            linewidth=1.2,
+            label=f"Your floor ({observer_floor})",
+        )
+
+    served_times = [s.served_time for s in samples if s.served_time is not None]
+    if served_times:
+        ax.scatter(
+            served_times,
+            [samples[0].observer_floor] * len(served_times),
+            s=24,
+            color="#2E7D32",
+            marker="o",
+            alpha=0.55,
+            zorder=4,
+            label="Served",
+        )
+    timed_out = [s for s in samples if s.timed_out]
+    if timed_out:
+        # Mark timeouts at the right edge so they're visible in aggregate.
+        ax.scatter(
+            [max(t.times[-1] for t in s.elevators) for s in timed_out],
+            [samples[0].observer_floor] * len(timed_out),
+            s=24,
+            color="#7A6A53",
+            marker="x",
+            alpha=0.7,
+            zorder=4,
+            label="Timed out",
+        )
+
+    ax.set_xlabel("Seconds since you arrived")
+    ax.set_ylabel("Floor")
+    ax.set_ylim(-0.5, floors - 0.5)
+    ax.set_title(f"God Mode: {len(samples)} sampled runs overlaid")
+    ax.legend(loc="upper right", fontsize=8, frameon=False)
+    ax.grid(axis="y", alpha=0.15, color="#7A6A53")
+    fig.tight_layout()
+    return fig
+
+
 def _prediction_caption(prediction: str, rigged_score: float) -> str:
     if prediction == "Definitely rigged" and rigged_score < 45:
         return "Prediction check: your outrage overshot the data. Respectfully."
@@ -585,6 +664,18 @@ def render_app() -> None:
 
         run_live = st.button("Run live simulation", type="primary")
         run_batch = st.button("Run batch analytics")
+        god_mode_samples = st.slider(
+            "God Mode samples",
+            min_value=10,
+            max_value=120,
+            value=40,
+            step=10,
+            help=(
+                "Number of independent runs to overlay. Higher = clearer "
+                "structural pattern, slower."
+            ),
+        )
+        run_god_mode = st.button("Show God Mode overlay")
 
     desired_dir = desired_direction(st.session_state.start_floor, st.session_state.destination_floor)
     observer = ObserverConfig(
@@ -683,6 +774,24 @@ def render_app() -> None:
         )
 
     _render_belief_trend()
+
+    if run_god_mode:
+        with st.spinner(f"Sampling {god_mode_samples} runs for God Mode overlay..."):
+            samples = sample_god_mode_trajectories(
+                config=config,
+                observer=observer,
+                profile=st.session_state.profile,
+                n_samples=int(god_mode_samples),
+            )
+        st.subheader("God Mode")
+        st.caption(
+            "Each translucent line is one elevator's path through one sampled "
+            "run. Where the lines cluster is where the system spends its time — "
+            "look at how often that's *not* your floor going your direction."
+        )
+        god_fig = _render_god_mode_overlay(samples, floors=floors)
+        st.pyplot(god_fig)
+        plt.close(god_fig)
 
     if run_batch:
         with st.spinner("Running batch analytics..."):
