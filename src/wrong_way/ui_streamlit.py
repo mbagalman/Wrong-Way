@@ -13,9 +13,18 @@ import pandas as pd
 import streamlit as st
 
 from .analytics import build_frustration_heatmap, run_batch_for_observer
-from .config import BuildingRenderState, Event, ObserverConfig, RunResult, SimulationConfig
+from .config import (
+    BuildingRenderState,
+    Event,
+    ObserverConfig,
+    RunResult,
+    SimulationConfig,
+    SubwayConfig,
+    SubwayObserver,
+)
 from .elevator_mode import ElevatorSimulation, desired_direction
 from .metrics import rage_score
+from .subway_mode import SubwaySimulation
 from .tone import TONE_PACK, complaint_generator, statistical_rebuttal
 
 PRESETS = {
@@ -49,6 +58,7 @@ PRESETS = {
 
 def _set_default_state() -> None:
     st.session_state.setdefault("rigged_history", [])
+    st.session_state.setdefault("mode", "Elevator")
     st.session_state.setdefault("floors", 20)
     st.session_state.setdefault("elevators", 3)
     st.session_state.setdefault("start_floor", 10)
@@ -56,6 +66,8 @@ def _set_default_state() -> None:
     st.session_state.setdefault("destination_floor", 11)
     st.session_state.setdefault("profile", "Morning Rush")
     st.session_state.setdefault("seed", 42)
+    st.session_state.setdefault("subway_desired_direction", "up")
+    st.session_state.setdefault("subway_seed", 42)
 
 
 def _apply_preset(preset_name: str) -> None:
@@ -288,6 +300,72 @@ def _tone_line(result_wrong_way_total: int, streak: int) -> str:
     return TONE_PACK[idx]
 
 
+def _render_subway_timeline(result: RunResult, max_wait: float) -> plt.Figure:
+    """Horizontal timeline showing wrong-way and useful train arrivals."""
+
+    fig, ax = plt.subplots(figsize=(10, 2.6))
+    fig.patch.set_facecolor("#F4EBD0")
+    ax.set_facecolor("#F8F2E4")
+
+    ax.axvline(0, color="#D7263D", linestyle="--", alpha=0.7, label="You arrive")
+
+    wrong_x = [
+        e.timestamp for e in result.event_log if e.event_type == "stop" and e.is_wrong_way
+    ]
+    served_x = [e.timestamp for e in result.event_log if e.event_type == "served"]
+
+    if wrong_x:
+        ax.scatter(
+            wrong_x,
+            [0] * len(wrong_x),
+            s=120,
+            color="#F46036",
+            marker="X",
+            zorder=3,
+            label="Wrong-way train",
+        )
+    if served_x:
+        ax.scatter(
+            served_x,
+            [1] * len(served_x),
+            s=180,
+            color="#2E86AB",
+            marker="o",
+            zorder=3,
+            label="Useful train",
+        )
+    if result.timed_out:
+        ax.axvline(
+            result.actual_wait_seconds,
+            color="#7A6A53",
+            linestyle=":",
+            alpha=0.7,
+            label="Timeout",
+        )
+
+    ax.set_yticks([0, 1])
+    ax.set_yticklabels(["Other dir", "Your dir"])
+    ax.set_xlabel("Seconds since you arrived")
+    upper_x = max(max_wait, result.actual_wait_seconds * 1.05) if result.actual_wait_seconds > 0 else max_wait
+    ax.set_xlim(-5, upper_x)
+    ax.set_ylim(-0.7, 1.7)
+    ax.set_title("Subway Arrivals Timeline")
+    ax.grid(axis="x", alpha=0.2, color="#7A6A53")
+    ax.spines["top"].set_visible(False)
+    ax.spines["right"].set_visible(False)
+    ax.legend(loc="upper right", fontsize=8, frameon=False)
+    fig.tight_layout()
+    return fig
+
+
+def _prediction_caption(prediction: str, rigged_score: float) -> str:
+    if prediction == "Definitely rigged" and rigged_score < 45:
+        return "Prediction check: your outrage overshot the data. Respectfully."
+    if prediction == "Pretty fair" and rigged_score > 60:
+        return "Prediction check: optimism did not survive contact with events."
+    return "Prediction check: your intuition and the run were broadly aligned."
+
+
 def _format_event(event: Event) -> str:
     car = f" car {event.elevator_id}" if event.elevator_id is not None else ""
     floor = f" @ floor {event.floor}" if event.floor is not None else ""
@@ -344,12 +422,120 @@ def _render_replay_panel(result: RunResult, floors: int) -> None:
             plt.close(replay_fig)
 
 
+def _render_belief_trend() -> None:
+    st.subheader("Rigged Belief Trend")
+    if st.session_state.rigged_history:
+        trend_df = pd.DataFrame(
+            {
+                "run": list(range(1, len(st.session_state.rigged_history) + 1)),
+                "rigged_belief": st.session_state.rigged_history,
+            }
+        )
+        st.line_chart(trend_df.set_index("run"))
+    if st.button("Reset belief trend"):
+        st.session_state.rigged_history = []
+        st.rerun()
+
+
+def _render_subway_app() -> None:
+    with st.sidebar:
+        st.header("Subway Setup")
+        st.radio(
+            "Desired direction",
+            options=["up", "down"],
+            horizontal=True,
+            key="subway_desired_direction",
+        )
+        desired_mean = st.slider(
+            "Mean wait between desired-direction trains (s)",
+            min_value=20,
+            max_value=300,
+            value=90,
+            step=10,
+        )
+        other_mean = st.slider(
+            "Mean wait between other-direction trains (s)",
+            min_value=20,
+            max_value=300,
+            value=60,
+            step=10,
+        )
+        max_wait = st.slider(
+            "Max wait (s)",
+            min_value=60,
+            max_value=1200,
+            value=600,
+            step=60,
+        )
+        seed = st.number_input(
+            "Seed",
+            min_value=0,
+            step=1,
+            value=int(st.session_state.subway_seed),
+            key="subway_seed",
+        )
+        run_subway = st.button("Run subway simulation", type="primary")
+
+    config = SubwayConfig(
+        desired_direction_rate=1.0 / float(desired_mean),
+        other_direction_rate=1.0 / float(other_mean),
+        max_wait_seconds=float(max_wait),
+        seed=int(seed),
+    )
+    observer = SubwayObserver(desired_direction=st.session_state.subway_desired_direction)
+
+    prediction = st.radio(
+        "Prediction before reveal: how unfair will this feel?",
+        ["Pretty fair", "Mildly cursed", "Definitely rigged"],
+        horizontal=True,
+        key="subway_prediction",
+    )
+
+    if run_subway:
+        result = SubwaySimulation(config=config, observer=observer).run()
+        wrong_way_total = result.wrong_way_stops
+        tone_line = _tone_line(wrong_way_total, result.max_wrong_way_streak)
+
+        st.subheader("Truth Screen")
+        kpi_cols = st.columns(4)
+        kpi_cols[0].metric("Actual Wait", f"{result.actual_wait_seconds:.0f}s")
+        kpi_cols[1].metric("Perceived Wait", f"{result.perceived_wait_seconds:.0f}s")
+        kpi_cols[2].metric("Ghost Trains", wrong_way_total)
+        kpi_cols[3].metric("Rage Score", f"{result.rage_score:.0f}")
+
+        st.info(tone_line)
+        st.caption(_prediction_caption(prediction, result.rigged_system_belief_score))
+
+        st.write("**Complaint Generator**")
+        st.write(complaint_generator(result))
+        st.write("**Statistical Rebuttal**")
+        st.write(statistical_rebuttal(result))
+
+        timeline_fig = _render_subway_timeline(result, max_wait=float(max_wait))
+        st.pyplot(timeline_fig)
+        plt.close(timeline_fig)
+
+        st.session_state.rigged_history.append(result.rigged_system_belief_score)
+        st.session_state.last_run = result
+        # Subway runs have no state_log, so the replay panel auto-skips. Clear
+        # any stale slider state from a prior elevator run for cleanliness.
+        st.session_state.pop("replay_tick", None)
+
+
 def render_app() -> None:
     st.set_page_config(page_title="Wrong-Way", page_icon="⬆️⬇️", layout="wide")
     _set_default_state()
 
     st.title("The Other Elevator Always Wins")
     st.caption("A frustration simulator for directional bias and the inspection paradox")
+
+    with st.sidebar:
+        st.selectbox("Mode", ["Elevator", "Subway"], key="mode")
+
+    if st.session_state.mode == "Subway":
+        _render_subway_app()
+        _render_belief_trend()
+        return
 
     with st.sidebar:
         st.header("Setup")
@@ -496,18 +682,7 @@ def render_app() -> None:
             st.session_state.last_run_floors,
         )
 
-    st.subheader("Rigged Belief Trend")
-    if st.session_state.rigged_history:
-        trend_df = pd.DataFrame(
-            {
-                "run": list(range(1, len(st.session_state.rigged_history) + 1)),
-                "rigged_belief": st.session_state.rigged_history,
-            }
-        )
-        st.line_chart(trend_df.set_index("run"))
-    if st.button("Reset belief trend"):
-        st.session_state.rigged_history = []
-        st.rerun()
+    _render_belief_trend()
 
     if run_batch:
         with st.spinner("Running batch analytics..."):
