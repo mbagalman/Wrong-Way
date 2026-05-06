@@ -1,23 +1,25 @@
 """Subway-mode simulation: two-direction independent arrivals.
 
 The classic inspection-paradox setup. The observer wants one direction;
-trains arrive in each direction as independent Poisson processes
-(Exponential inter-arrival times). When a useful train arrives the
-observer is served; opposite-direction arrivals beforehand count as
+trains arrive in each direction as independent processes (Exponential by
+default; Gamma and Lognormal also available). When a useful train arrives
+the observer is served; opposite-direction arrivals beforehand count as
 ghost-train wrong-way stops.
 
 Reuses :class:`RunResult` and the metric helpers from ``metrics.py`` so
-subway runs feed the same UI panels as elevator runs. The inter-arrival
-sampler is plugged in as a callable so future tickets can swap Exponential
-for Gamma/lognormal without touching the simulation loop.
+subway runs feed the same UI panels as elevator runs. Inter-arrival
+sampling is plugged in via :data:`InterArrivalSampler` so distribution
+swaps don't touch the simulation loop.
 """
 
 from __future__ import annotations
 
+import math
 import random
 from typing import Callable
 
 from .config import (
+    ArrivalDistribution,
     Direction,
     Event,
     RunResult,
@@ -33,14 +35,60 @@ from .metrics import (
 
 InterArrivalSampler = Callable[[random.Random, float], float]
 
+# Hardcoded shape parameters for the non-Exponential distributions. Both are
+# tuned to feel meaningfully different from Exponential without being so
+# extreme they break the mean-preserved teaching point. Exposing these as
+# config knobs is a future ticket if anyone wants to A/B them.
+_GAMMA_SHAPE = 2.0
+_LOGNORMAL_SIGMA = 1.0
+
 
 def _exponential_inter_arrival(rng: random.Random, rate: float) -> float:
-    """Sample an inter-arrival time from ``Exp(rate)``.
-
-    ``rate`` is arrivals per second (λ); the mean inter-arrival is ``1/rate``.
-    """
+    """Sample inter-arrival time from ``Exp(rate)``. Mean is ``1/rate``."""
 
     return rng.expovariate(rate)
+
+
+def _gamma_inter_arrival(rng: random.Random, rate: float) -> float:
+    """Sample inter-arrival time from ``Gamma(shape=2, scale=1/(2*rate))``.
+
+    Shape > 1 produces unimodal inter-arrivals — fewer near-zero gaps than
+    Exponential, so trains feel more "scheduled." Scale is set so the mean
+    stays at ``1/rate``.
+    """
+
+    scale = 1.0 / (rate * _GAMMA_SHAPE)
+    return rng.gammavariate(_GAMMA_SHAPE, scale)
+
+
+def _lognormal_inter_arrival(rng: random.Random, rate: float) -> float:
+    """Sample inter-arrival time from a mean-preserving Lognormal.
+
+    The lognormal of ``(μ, σ)`` has mean ``exp(μ + σ²/2)``. To preserve a
+    target mean of ``1/rate`` we set ``μ = ln(1/rate) - σ²/2``. The result
+    has heavier right tail than Exponential — long gaps are more likely
+    while typical gaps are shorter.
+    """
+
+    target_mean = 1.0 / rate
+    mu = math.log(target_mean) - (_LOGNORMAL_SIGMA**2) / 2.0
+    return rng.lognormvariate(mu, _LOGNORMAL_SIGMA)
+
+
+_SAMPLERS: dict[ArrivalDistribution, InterArrivalSampler] = {
+    "exponential": _exponential_inter_arrival,
+    "gamma": _gamma_inter_arrival,
+    "lognormal": _lognormal_inter_arrival,
+}
+
+
+def make_sampler(distribution: ArrivalDistribution) -> InterArrivalSampler:
+    """Return the inter-arrival sampler for ``distribution``."""
+
+    try:
+        return _SAMPLERS[distribution]
+    except KeyError as exc:
+        raise ValueError(f"unknown arrival_distribution: {distribution!r}") from exc
 
 
 class SubwaySimulation:
@@ -55,12 +103,16 @@ class SubwaySimulation:
         self,
         config: SubwayConfig,
         observer: SubwayObserver,
-        sampler: InterArrivalSampler = _exponential_inter_arrival,
+        sampler: InterArrivalSampler | None = None,
     ) -> None:
         self.config = config
         self.observer = observer
         self.rng = random.Random(config.seed)
-        self.sampler = sampler
+        # Tests can inject a deterministic sampler; default resolves from the
+        # config's arrival_distribution.
+        self.sampler = sampler if sampler is not None else make_sampler(
+            config.arrival_distribution
+        )
 
         self._now: float = observer.arrival_time
         self.event_log: list[Event] = []

@@ -6,6 +6,7 @@ from dataclasses import dataclass, field
 from typing import Any, Literal, TypedDict
 
 Direction = Literal["up", "down", "idle"]
+ArrivalDistribution = Literal["exponential", "gamma", "lognormal"]
 EventType = Literal[
     "pass_by",
     "stop",
@@ -99,12 +100,25 @@ class ObserverConfig:
 
 @dataclass(frozen=True)
 class SubwayConfig:
-    """Two-direction Poisson arrival platform configuration.
+    """Two-direction arrival platform configuration.
 
     Each direction has its own rate (arrivals per second). Rates are kept
     independent rather than tied to a single ratio so asymmetric scenarios
     can be expressed naturally — "uptown one every 90s, downtown one every
     30s" for example.
+
+    ``arrival_distribution`` chooses the inter-arrival distribution:
+
+    - ``"exponential"`` (default): memoryless arrivals, Poisson process.
+      The classic textbook setup for the inspection paradox.
+    - ``"gamma"``: more "scheduled-feeling" arrivals — fewer near-zero
+      gaps, less bunching. Mean preserved at ``1/rate``.
+    - ``"lognormal"``: heavier-tailed gaps — long waits become more likely
+      while typical waits stay similar. Mean preserved at ``1/rate``.
+
+    All three preserve the per-direction mean so changing distribution
+    doesn't shift the average wait — only the *shape* of the wait
+    distribution. That's the teaching point of this experimental surface.
     """
 
     desired_direction_rate: float = 1.0 / 90.0
@@ -112,6 +126,7 @@ class SubwayConfig:
     max_wait_seconds: float = 600.0
     seed: int | None = None
     perceived_coeffs: PerceivedCoefficients = field(default_factory=PerceivedCoefficients)
+    arrival_distribution: ArrivalDistribution = "exponential"
 
     def __post_init__(self) -> None:
         if self.desired_direction_rate <= 0:
@@ -120,6 +135,10 @@ class SubwayConfig:
             raise ValueError("other_direction_rate must be > 0")
         if self.max_wait_seconds <= 0:
             raise ValueError("max_wait_seconds must be > 0")
+        if self.arrival_distribution not in ("exponential", "gamma", "lognormal"):
+            raise ValueError(
+                f"unknown arrival_distribution: {self.arrival_distribution!r}"
+            )
 
 
 @dataclass(frozen=True)

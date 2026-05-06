@@ -73,6 +73,7 @@ def _set_default_state() -> None:
     st.session_state.setdefault("seed", 42)
     st.session_state.setdefault("subway_desired_direction", "up")
     st.session_state.setdefault("subway_seed", 42)
+    st.session_state.setdefault("subway_arrival_distribution", "exponential")
 
 
 def _apply_preset(preset_name: str) -> None:
@@ -546,6 +547,18 @@ def _render_subway_app() -> None:
             value=600,
             step=60,
         )
+        st.selectbox(
+            "Arrival distribution",
+            options=["exponential", "gamma", "lognormal"],
+            key="subway_arrival_distribution",
+            help=(
+                "Inter-arrival distribution per direction. Exponential is the "
+                "memoryless Poisson default. Gamma feels more 'scheduled' "
+                "(fewer near-zero gaps). Lognormal has a heavier right tail "
+                "(long waits more likely). Mean wait is preserved across "
+                "all three — only the shape changes."
+            ),
+        )
         seed = st.number_input(
             "Seed",
             min_value=0,
@@ -560,6 +573,7 @@ def _render_subway_app() -> None:
         other_direction_rate=1.0 / float(other_mean),
         max_wait_seconds=float(max_wait),
         seed=int(seed),
+        arrival_distribution=st.session_state.subway_arrival_distribution,
     )
     observer = SubwayObserver(desired_direction=st.session_state.subway_desired_direction)
 
